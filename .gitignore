@@ -1,0 +1,72 @@
+# Build output
+build/
+*.tar.gz
+*.exe
+*.a
+*.o
+*.lo
+*.la
+*.pyc
+
+# Binaries
+src/memcoind
+src/memcoin-cli
+src/memcoin-tx
+src/memcoin-wallet
+src/test/test_memcoin
+
+# Config
+src/config/bitcoin-config.h
+src/config/bitcoin-config.h.in
+
+# Qt
+src/qt/*.moc
+src/qt/moc_*.cpp
+src/qt/forms/ui_*.h
+src/qt/test/moc*.cpp
+src/qt/memcoin-qt.config
+src/qt/memcoin-qt.creator
+src/qt/memcoin-qt.creator.user
+src/qt/memcoin-qt.files
+src/qt/memcoin-qt.includes
+*.qm
+qrc_*.cpp
+
+# Logs and temp
+*.log
+*.bak
+*.rej
+*.orig
+*.swp
+*.*~*
+.DS_Store
+.deps
+.dirstamp
+.libs
+
+# Coverage
+*.gcno
+*.gcda
+/*.info
+test_memcoin.coverage/
+total.coverage/
+coverage_percent.txt
+
+# IDE
+.vscode
+nbproject/
+.cproject
+.project
+.pydevproject
+.vagrant
+
+# LevelDB
+!src/leveldb*/Makefile
+src/leveldb/CONTRIBUTING.md
+src/leveldb/NEWS
+src/leveldb/TODO
+
+# Docs
+/doc/doxygen/
+/doc/html/
+/doc/md/

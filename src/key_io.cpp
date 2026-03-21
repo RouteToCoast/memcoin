@@ -1,0 +1,146 @@
+// Copyright (c) 2014-2016 The Bitcoin Core developers
+// Copyright (c) 2019-2025 The Bitcoin developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <key_io.h>
+
+#include <base58.h>
+#include <chainparams.h>
+#include <config.h>
+#include <script/script.h>
+#include <util/overloaded.h>
+#include <util/strencodings.h>
+
+#include <algorithm>
+#include <cassert>
+#include <cstring>
+#include <variant>
+
+CKey DecodeSecret(const std::string &str) {
+    CKey key;
+    std::vector<uint8_t> data;
+    if (DecodeBase58Check(str, data, 34)) {
+        const std::vector<uint8_t> &privkey_prefix =
+            Params().Base58Prefix(CChainParams::SECRET_KEY);
+        if ((data.size() == 32 + privkey_prefix.size() ||
+             (data.size() == 33 + privkey_prefix.size() && data.back() == 1)) &&
+            std::equal(privkey_prefix.begin(), privkey_prefix.end(),
+                       data.begin())) {
+            bool compressed = data.size() == 33 + privkey_prefix.size();
+            key.Set(data.begin() + privkey_prefix.size(),
+                    data.begin() + privkey_prefix.size() + 32, compressed);
+        }
+    }
+    if (!data.empty()) {
+        memory_cleanse(data.data(), data.size());
+    }
+    return key;
+}
+
+std::string EncodeSecret(const CKey &key) {
+    assert(key.IsValid());
+    std::vector<uint8_t> data = Params().Base58Prefix(CChainParams::SECRET_KEY);
+    data.insert(data.end(), key.begin(), key.end());
+    if (key.IsCompressed()) {
+        data.push_back(1);
+    }
+    std::string ret = EncodeBase58Check(data);
+    memory_cleanse(data.data(), data.size());
+    return ret;
+}
+
+CExtPubKey DecodeExtPubKey(const std::string &str) {
+    CExtPubKey key;
+    std::vector<uint8_t> data;
+    if (DecodeBase58Check(str, data, 78)) {
+        const std::vector<uint8_t> &prefix =
+            Params().Base58Prefix(CChainParams::EXT_PUBLIC_KEY);
+        if (data.size() == BIP32_EXTKEY_SIZE + prefix.size() &&
+            std::equal(prefix.begin(), prefix.end(), data.begin())) {
+            key.Decode(data.data() + prefix.size());
+        }
+    }
+    return key;
+}
+
+std::string EncodeExtPubKey(const CExtPubKey &key) {
+    std::vector<uint8_t> data =
+        Params().Base58Prefix(CChainParams::EXT_PUBLIC_KEY);
+    size_t size = data.size();
+    data.resize(size + BIP32_EXTKEY_SIZE);
+    key.Encode(data.data() + size);
+    std::string ret = EncodeBase58Check(data);
+    return ret;
+}
+
+CExtKey DecodeExtKey(const std::string &str) {
+    CExtKey key;
+    std::vector<uint8_t> data;
+    if (DecodeBase58Check(str, data, 78)) {
+        const std::vector<uint8_t> &prefix =
+            Params().Base58Prefix(CChainParams::EXT_SECRET_KEY);
+        if (data.size() == BIP32_EXTKEY_SIZE + prefix.size() &&
+            std::equal(prefix.begin(), prefix.end(), data.begin())) {
+            key.Decode(data.data() + prefix.size());
+        }
+    }
+    return key;
+}
+
+std::string EncodeExtKey(const CExtKey &key) {
+    std::vector<uint8_t> data =
+        Params().Base58Prefix(CChainParams::EXT_SECRET_KEY);
+    size_t size = data.size();
+    data.resize(size + BIP32_EXTKEY_SIZE);
+    key.Encode(data.data() + size);
+    std::string ret = EncodeBase58Check(data);
+    memory_cleanse(data.data(), data.size());
+    return ret;
+}
+
+std::string EncodeDestination(const CTxDestination &dest, const Config &config, const bool tokenAwareAddress) {
+    const CChainParams &params = config.GetChainParams();
+    return EncodeLegacyAddr(dest, params);
+}
+
+CTxDestination DecodeDestination(const std::string &addr, const CChainParams &params, bool *tokenAwareAddressOut) {
+    if (tokenAwareAddressOut) *tokenAwareAddressOut = false;
+    return DecodeLegacyAddr(addr, params);
+}
+
+bool IsValidDestinationString(const std::string &str, const CChainParams &params, bool *tokenAwareAddressOut) {
+    return IsValidDestination(DecodeDestination(str, params, tokenAwareAddressOut));
+}
+
+std::string EncodeLegacyAddr(const CTxDestination &dest, const CChainParams &params) {
+    return std::visit(
+        util::Overloaded{
+            [&params](const CKeyID &id) {
+                std::vector<uint8_t> data = params.Base58Prefix(CChainParams::PUBKEY_ADDRESS);
+                data.insert(data.end(), id.begin(), id.end());
+                return EncodeBase58Check(data);
+            },
+            [](const CNoDestination &) { return std::string{}; }
+        }, dest);
+}
+
+CTxDestination DecodeLegacyAddr(const std::string &str, const CChainParams &params) {
+    std::vector<uint8_t> data;
+    uint160 hash{uint160::Uninitialized};
+    if (!DecodeBase58Check(str, data, 33 /* max size is 33 (was 21 before p2sh_32), 33 is to support p2sh_32 */)) {
+        return CNoDestination();
+    }
+    // base58-encoded Bitcoin addresses.
+    // Public-key-hash-addresses have version 0 (or 111 testnet).
+    const std::vector<uint8_t> &pubkey_prefix =
+        params.Base58Prefix(CChainParams::PUBKEY_ADDRESS);
+    if (data.size() == hash.size() + pubkey_prefix.size() &&
+        std::equal(pubkey_prefix.begin(), pubkey_prefix.end(), data.begin())) {
+        std::copy(data.begin() + pubkey_prefix.size(), data.end(),
+                  hash.begin());
+        return CKeyID(hash);
+    }
+    // Memcoin: P2SH disabled, script addresses rejected
+    return CNoDestination();
+}
